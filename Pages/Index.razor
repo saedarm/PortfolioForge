@@ -1,0 +1,259 @@
+@page "/"
+@inject GitHubService GitHub
+@inject PortfolioGenerator Generator
+@inject IJSRuntime JS
+
+<PageTitle>PortfolioForge — Make your dev portfolio in minutes</PageTitle>
+
+<div class="app">
+    <header class="app-header">
+        <div class="logo">
+            <span class="logo-mark">◇</span>
+            <span class="logo-text">PortfolioForge</span>
+        </div>
+        <p class="tagline">Turn your GitHub into a portfolio you actually want to share.</p>
+    </header>
+
+    <section class="input-section">
+        <div class="input-row">
+            <span class="at">@@</span>
+            <input @bind="_username" @bind:event="oninput" @onkeydown="OnKeyDown"
+                   placeholder="github-username" autocomplete="off" spellcheck="false" />
+            <button @onclick="LoadAsync" disabled="@_loading" class="primary-btn">
+                @(_loading ? "Loading..." : "Forge it →")
+            </button>
+        </div>
+
+        <div class="token-section">
+            <button class="token-toggle" @onclick="() => _showTokenInput = !_showTokenInput">
+                @(_showTokenInput ? "▼" : "▶") Hit a rate limit? Add a GitHub token
+            </button>
+            @if (_showTokenInput)
+            {
+                <div class="token-input-wrap">
+                    <input type="password" class="token-input"
+                           @bind="_token" @bind:event="oninput"
+                           @onblur="ApplyToken"
+                           placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxx" />
+                    <p class="token-hint">
+                        Bumps rate limits from 60/hr to 5000/hr. Create one at
+                        <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a>
+                        with no scopes (public read is enough). Token stays in your browser — only sent to api.github.com.
+                        @if (GitHub.HasToken)
+                        {
+                            <span class="token-active"> · Token active</span>
+                        }
+                    </p>
+                </div>
+            }
+        </div>
+
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <p class="error">@_error</p>
+        }
+    </section>
+
+    @if (_user != null && _repos != null)
+    {
+        <section class="control-bar">
+            <div class="control-left">
+                <div class="user-mini">
+                    @if (!string.IsNullOrEmpty(_user.AvatarUrl))
+                    {
+                        <img src="@_user.AvatarUrl" alt="" />
+                    }
+                    <div>
+                        <div class="user-name">@(_user.Name ?? _user.Login)</div>
+                        <div class="user-stats">@_repos.Count repos · @_repos.Sum(r => r.Stars) stars</div>
+                    </div>
+                </div>
+            </div>
+            <div class="control-right">
+                <div class="template-pills">
+                    @foreach (var t in Generator.Templates)
+                    {
+                        <button class="@(t.Name == _currentTemplate?.Name ? "pill active" : "pill")"
+                                @onclick="() => Pick(t)"
+                                title="@t.Description">@t.Name</button>
+                    }
+                </div>
+                <button class="action-btn randomize" @onclick="Randomize" title="Shuffle theme and variant">
+                    <span class="icon">⚅</span> Randomize
+                </button>
+                <button class="action-btn export" @onclick="ExportZip" disabled="@_exporting">
+                    <span class="icon">↓</span> @(_exporting ? "Zipping..." : "Export ZIP")
+                </button>
+            </div>
+        </section>
+
+        <section class="variant-bar">
+            <span class="variant-label">Variant:</span>
+            @for (var i = 0; i < _currentTemplate!.VariantCount; i++)
+            {
+                var idx = i;
+                <button class="@(idx == _currentVariant ? "variant-dot active" : "variant-dot")"
+                        @onclick="() => PickVariant(idx)"
+                        title="@($"Variant {idx + 1}")">@(idx + 1)</button>
+            }
+            <span class="variant-info">
+                @_currentTemplate.Name · v@(_currentVariant + 1) of @_currentTemplate.VariantCount
+                <span class="variant-total">(@Generator.TotalVariantCount total combinations)</span>
+            </span>
+        </section>
+
+        <section class="preview-section">
+            <div class="preview-bar">
+                <span class="dot dot-r"></span>
+                <span class="dot dot-y"></span>
+                <span class="dot dot-g"></span>
+                <span class="url-bar">@(_user.Login).portfolio / @_currentTemplate.Name · v@(_currentVariant + 1)</span>
+            </div>
+            <iframe srcdoc="@_iframeContent" sandbox="allow-scripts" title="Portfolio preview"></iframe>
+        </section>
+
+        <section class="info-bar">
+            <p>
+                <strong>@_currentTemplate.Name.</strong> @_currentTemplate.Description
+                Click <em>Randomize</em> to try a different theme/variant, click variant dots to step through,
+                or <em>Export ZIP</em> for a static <code>index.html</code> + <code>style.css</code> + <code>script.js</code>.
+            </p>
+        </section>
+    }
+    else if (!_loading && _user == null && string.IsNullOrEmpty(_error))
+    {
+        <section class="empty-state">
+            <div class="empty-card">
+                <h2>How it works</h2>
+                <ol>
+                    <li>Enter any public GitHub username above</li>
+                    <li>We fetch their public repos (no auth needed)</li>
+                    <li>Pick a theme, click variant dots, or hit <strong>Randomize</strong></li>
+                    <li>Preview live, then <strong>Export ZIP</strong> for a fully static site</li>
+                </ol>
+                <p class="footnote">5 themes × 4 variants = 20 distinct portfolios. 100% client-side. GitHub API limits unauthenticated calls to 60/hour — add a token above for 5000/hr.</p>
+            </div>
+        </section>
+    }
+</div>
+
+@code {
+    private string _username = "";
+    private string _token = "";
+    private bool _showTokenInput;
+    private bool _loading;
+    private bool _exporting;
+    private string _error = "";
+    private GitHubUser? _user;
+    private List<GitHubRepo>? _repos;
+    private IPortfolioTemplate? _currentTemplate;
+    private int _currentVariant = 0;
+    private GeneratedPortfolio? _currentPortfolio;
+    private string _iframeContent = "";
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await LoadAsync();
+    }
+
+    private void ApplyToken()
+    {
+        GitHub.SetToken(_token);
+        StateHasChanged();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_username)) return;
+        ApplyToken();
+        _loading = true;
+        _error = "";
+        _user = null;
+        _repos = null;
+        _currentPortfolio = null;
+        StateHasChanged();
+
+        try
+        {
+            _user = await GitHub.GetUserAsync(_username.Trim());
+            if (_user == null)
+            {
+                _error = GitHub.HasToken
+                    ? "User not found, or your token doesn't have access."
+                    : "User not found, or GitHub rate-limit hit (60/hr per IP). Add a token above to bump to 5000/hr.";
+                _loading = false;
+                return;
+            }
+            _repos = await GitHub.GetReposAsync(_username.Trim());
+            if (_repos.Count == 0)
+            {
+                _error = "No public repos found for that user.";
+                _loading = false;
+                return;
+            }
+            _currentTemplate = Generator.Templates.First();
+            _currentVariant = 0;
+            Regenerate();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Something went wrong: {ex.Message}";
+        }
+        _loading = false;
+    }
+
+    private void Pick(IPortfolioTemplate template)
+    {
+        _currentTemplate = template;
+        _currentVariant = 0;
+        Regenerate();
+    }
+
+    private void PickVariant(int variant)
+    {
+        _currentVariant = variant;
+        Regenerate();
+    }
+
+    private void Randomize()
+    {
+        if (_user == null || _repos == null) return;
+        var (template, variant) = Generator.PickRandom(_currentTemplate, _currentVariant);
+        _currentTemplate = template;
+        _currentVariant = variant;
+        Regenerate();
+    }
+
+    private void Regenerate()
+    {
+        if (_user == null || _repos == null || _currentTemplate == null) return;
+        _currentPortfolio = Generator.Generate(_currentTemplate, _user, _repos, _currentVariant);
+        _iframeContent = InlinePreview(_currentPortfolio);
+    }
+
+    private static string InlinePreview(GeneratedPortfolio p)
+    {
+        // Inline CSS and JS so the iframe srcdoc preview works without a server
+        return p.Html
+            .Replace("<link rel=\"stylesheet\" href=\"style.css\">", $"<style>{p.Css}</style>")
+            .Replace("<script src=\"script.js\"></script>", $"<script>{p.Js}</script>");
+    }
+
+    private async Task ExportZip()
+    {
+        if (_user == null || _currentPortfolio == null || _currentTemplate == null) return;
+        _exporting = true;
+        try
+        {
+            var bytes = Generator.BuildZip(_user, _currentPortfolio, _currentTemplate.Name, _currentVariant);
+            var base64 = Convert.ToBase64String(bytes);
+            var filename = $"{_user.Login}-portfolio-{_currentTemplate.Name.ToLower()}-v{_currentVariant + 1}.zip";
+            await JS.InvokeVoidAsync("portfolioForge.downloadFile", filename, base64, "application/zip");
+        }
+        catch (Exception ex)
+        {
+            _error = $"Export failed: {ex.Message}";
+        }
+        _exporting = false;
+    }
+}
