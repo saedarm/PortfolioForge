@@ -3,8 +3,8 @@
 Turn any GitHub username into a downloadable developer portfolio. Five themes, four variants each, twenty distinct portfolios in twenty clicks. Export as a ZIP of static HTML, CSS, and JS. Deploy anywhere.
 
 Built in Blazor WebAssembly on .NET 10. Runs entirely in the browser — no backend, no database, no data leaving your tab.
+<img width="771" height="866" alt="image" src="https://github.com/user-attachments/assets/9889bf5e-96c7-45b3-8ad2-c51164113ca0" />
 
-![placeholder for screenshot — add later]
 
 ## What it does
 
@@ -131,17 +131,6 @@ The entire app runs in your browser. There's an optional input for a GitHub pers
 
 This is the actual point of going fully client-side for this kind of tool. The privacy story isn't a policy you have to trust — it's just how the architecture works.
 
-## Deploying
-
-PortfolioForge is hosted on Azure Static Web Apps under a custom domain. The included `.github/workflows/azure-static-web-apps.yml` is a reference. Real deploy:
-
-1. Push the repo to GitHub
-2. Create a Static Web App resource in the Azure Portal
-3. Connect to your GitHub repo, branch `main`
-4. Build preset: **Blazor**. App location: `src/PortfolioForge`. Output: `wwwroot`
-5. Azure writes its own workflow file with a deploy token. Every push to `main` ships.
-
-Other static hosts work too — Netlify, Vercel, Cloudflare Pages, GitHub Pages. You'd run `dotnet publish -c Release` locally and upload the contents of `bin/Release/net10.0/publish/wwwroot/` manually. Less automation, same result.
 
 ## Roadmap
 
