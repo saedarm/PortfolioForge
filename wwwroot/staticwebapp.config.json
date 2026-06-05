@@ -1,0 +1,19 @@
+{
+  "navigationFallback": {
+    "rewrite": "/index.html",
+    "exclude": ["/_framework/*", "/css/*", "/js/*"]
+  },
+  "mimeTypes": {
+    ".dll": "application/octet-stream",
+    ".dat": "application/octet-stream",
+    ".blat": "application/octet-stream",
+    ".webcil": "application/octet-stream",
+    ".json": "application/json",
+    ".wasm": "application/wasm",
+    ".woff": "application/font-woff",
+    ".woff2": "application/font-woff2"
+  },
+  "globalHeaders": {
+    "cache-control": "must-revalidate, max-age=86400"
+  }
+}
